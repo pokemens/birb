@@ -165,6 +165,15 @@ body {
 </div>
 
 <script>
+// Audio setup
+const jumpSound = new Audio('jump.wav');
+const hitSound = new Audio('hit.wav');
+// Background track (does not loop)
+const bgMusic = new Audio('https://freemidi.org/getterm2-4834');
+bgMusic.volume = 0.5; // Adjust volume as needed
+bgMusic.loop = false;
+bgMusic.play().catch(e => console.log('Autoplay may be blocked by the browser.', e));
+
 // Adjust canvas to fill the window
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -256,6 +265,8 @@ function resetGame() {
 function jumpBird() {
     if (!gameOver) {
         birdVelY = jump;
+        jumpSound.currentTime = 0;
+        jumpSound.play();
     }
 }
 
@@ -337,6 +348,8 @@ function update() {
 function endGame() {
     gameOver = true;
     finalScore = score; 
+    hitSound.currentTime = 0;
+    hitSound.play();
     showShareOverlay();
 }
 
@@ -413,9 +426,8 @@ function showShareOverlay() {
         offCtx.fillStyle = '#000';
         offCtx.textAlign = 'center';
         offCtx.fillText("Check out my score!", offCanvas.width/2, 50);
-        
-        // 4 emojis under "Check out my score!"
-        offCtx.fillText("🐦🐤 🐦🐤", offCanvas.width/2, 80);
+
+        offCtx.fillText("🐦🐤🐦🐤", offCanvas.width/2, 80);
 
         let imgW = Math.min(chosenBird.width, 256);
         let imgH = Math.min(chosenBird.height, 256);
