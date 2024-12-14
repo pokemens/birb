@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Flappy Pidgin</title>
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    overflow: hidden;
+    font-family: sans-serif;
+    height: 100%;
+    width: 100%;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+
+.game-container {
+    position: relative;
+    flex: 1;
+    background: #87CEEB;
+    overflow: hidden;
+}
+
+.top-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 50px;
+    background: #000;
+    display: flex;
+    align-items: center;
+    z-index: 2;
+    padding: 0 5px;
+}
+
+.icon-button {
+    width: 50px;
+    height: 50px;
+    background: #fff;
+    border: none;
+    margin-right: 5px;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.icon-button img {
+    width: 100%;
+    height: auto;
+}
+
+#gameCanvas {
+    display: block;
+}
+
+.share-overlay {
+    position: fixed;
+    top:0;
+    left:0;
+    width:100vw;
+    height:100vh;
+    background:rgba(0,0,0,0.8);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    z-index:1000;
+    flex-direction: column;
+    padding: 10px;
+}
+
+.share-card {
+    background:#fff;
+    padding:20px;
+    border-radius:10px;
+    text-align:center;
+    width:300px;
+    position:relative;
+    font-family: "Comic Sans MS", "Comic Sans", cursive; 
+    color:#000;
+}
+
+.share-preview-img {
+    max-width:100%;
+    height:auto;
+    margin:10px auto;
+    display:block;
+}
+
+.share-score {
+    font-size:30px;
+    font-weight:bold;
+    color:#ff0000;
+    margin:10px 0;
+}
+
+.share-invite {
+    font-size:16px;
+    margin:10px 0;
+}
+
+.share-card button {
+    background:#000;
+    color:#fff;
+    border:none;
+    padding:10px 20px;
+    cursor:pointer;
+    font-size:16px;
+    margin-top:10px;
+    margin-right:5px;
+}
+
+.share-logos {
+    margin:10px 0;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    gap:10px;
+}
+
+.share-logos a img {
+    width:30px;
+    height:auto;
+}
+
+.save-instructions {
+    font-size:14px;
+    margin:10px 0;
+    color:#333;
+}
+</style>
+</head>
+<body>
+<div class="game-container">
+    <div class="top-bar">
+        <button class="icon-button" id="btn-x"><img src="https://i.ibb.co/jzDH4HY/x.png" alt="X"></button>
+        <button class="icon-button" id="btn-tg"><img src="https://i.ibb.co/LnXFjPN/tg.jpg" alt="TG"></button>
+        <button class="icon-button" id="btn-dex"><img src="https://i.ibb.co/bN025xY/d.png" alt="Dex"></button>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+</div>
+
+<div class="share-overlay" id="shareOverlay" style="display:none;">
+    <div class="share-card" id="shareCard">
+        <img class="share-preview-img" id="shareImagePreview" src="" alt="Preview Image"/>
+        <p class="save-instructions">copy or save image 🐦</p>
+        <p class="share-score" id="finalScoreText"></p>
+        <div class="share-logos">
+            <a href="https://twitter.com" target="_blank"><img src="https://i.ibb.co/jzDH4HY/x.png" alt="X"></a>
+            <a href="https://dexscreener.com" target="_blank"><img src="https://i.ibb.co/bN025xY/d.png" alt="Dex"></a>
+            <a href="https://t.me" target="_blank"><img src="https://i.ibb.co/LnXFjPN/tg.jpg" alt="TG"></a>
+        </div>
+        <p class="share-invite">Can you beat me?</p>
+        <button id="tryAgain">Try Again</button>
+        <button id="downloadImage">Download Image</button>
+        <button id="postToX">Post to X</button>
+    </div>
+</div>
+
+<script>
+// Adjust canvas to fill the window
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// Share overlay elements
+const shareOverlay = document.getElementById('shareOverlay');
+const finalScoreText = document.getElementById('finalScoreText');
+const tryAgainBtn = document.getElementById('tryAgain');
+const downloadImageBtn = document.getElementById('downloadImage');
+const postToXBtn = document.getElementById('postToX');
+const shareImagePreview = document.getElementById('shareImagePreview');
+
+// Bird images by score
+const defaultBirdSrc = "https://i.imghippo.com/files/chD8054Klw.png"; 
+const bird5to10 = "https://i.imghippo.com/files/oeM9160VAw.png";
+const bird10to25 = "https://i.imghippo.com/files/ITK7491LGk.png";
+const bird25to50 = "https://i.imghippo.com/files/PCT9863Bs.png";
+const fancyBirdSrc = "https://i.ibb.co/X2SR8Xh/pidgin-512x512.gif";
+
+let birdImg = new Image();
+birdImg.src = defaultBirdSrc;
+let birdW = 50; 
+let birdH = 40;
+
+let birdX, birdY, birdVelY;
+let score, finalScore, gameOver;
+let obstacles = [];
+
+// Cloud image
+const cloudImg = new Image();
+cloudImg.src = "https://i.imghippo.com/files/pmQ7391ns.png";
+let clouds = [];
+
+// Slightly easier settings
+let gravity = 0.25;
+let jump = -6;
+let gapSize = 165; 
+let obstacleWidth = 60;
+let obstacleSpeed = 2.7; 
+
+function createCloud() {
+    let cloudSpeed = 0.5 + Math.random();
+    let cloudY = Math.random()*(canvas.height/2 - 50);
+    let cloudW = 100 + Math.random()*100;
+    let cloudH = cloudW * 0.6;
+    clouds.push({
+        x: canvas.width + 50,
+        y: cloudY,
+        speed: cloudSpeed,
+        w: cloudW,
+        h: cloudH
+    });
+}
+
+// Add clouds periodically
+setInterval(() => {
+    if (!gameOver) {
+        createCloud();
+    }
+}, 3000);
+
+function createObstacle(initialX) {
+    let gapY = Math.floor(Math.random()*((canvas.height - 200))) + 100;
+    obstacles.push({
+        x: initialX,
+        gapY: gapY
+    });
+}
+
+function resetGame() {
+    birdX = 50;
+    birdY = canvas.height/2;
+    birdVelY = 0;
+    score = 0;
+    finalScore = 0;
+    gameOver = false;
+    obstacles = [];
+    clouds = [];
+    createObstacle(canvas.width + 200);
+    createObstacle(canvas.width + 600);
+}
+
+function jumpBird() {
+    if (!gameOver) {
+        birdVelY = jump;
+    }
+}
+
+document.body.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        jumpBird();
+    }
+});
+document.body.addEventListener('click', () => {
+    jumpBird();
+});
+
+function drawBird() {
+    ctx.save();
+    ctx.translate(birdX + birdW/2, birdY + birdH/2);
+    ctx.scale(-1, 1);
+    ctx.drawImage(birdImg, -birdW/2, -birdH/2, birdW, birdH);
+    ctx.restore();
+}
+
+function drawRectObstacle(obs) {
+    let candleColor = Math.random() > 0.5 ? '#d90000' : '#00d900';
+    let gapTop = obs.gapY - gapSize/2;
+    let gapBottom = obs.gapY + gapSize/2;
+
+    ctx.fillStyle = candleColor;
+    ctx.fillRect(obs.x, 0, obstacleWidth, gapTop);
+
+    ctx.fillStyle = '#006400';
+    ctx.fillRect(obs.x, gapBottom, obstacleWidth, canvas.height - gapBottom);
+}
+
+function drawClouds() {
+    for (let c of clouds) {
+        ctx.drawImage(cloudImg, c.x, c.y, c.w, c.h);
+    }
+}
+
+function update() {
+    if (gameOver) return;
+
+    birdVelY += gravity;
+    birdY += birdVelY;
+
+    for (let i=0; i<obstacles.length; i++){
+        obstacles[i].x -= obstacleSpeed;
+    }
+
+    for (let c of clouds) {
+        c.x -= c.speed;
+    }
+    clouds = clouds.filter(c => c.x + c.w > 0);
+
+    if (obstacles[obstacles.length - 1].x < canvas.width - 300) {
+        createObstacle(canvas.width + 200);
+    }
+
+    if (obstacles.length && obstacles[0].x < -obstacleWidth) {
+        obstacles.shift();
+        score++;
+    }
+
+    for (let obs of obstacles) {
+        let gapTop = obs.gapY - gapSize/2;
+        let gapBottom = obs.gapY + gapSize/2;
+
+        if (birdX + birdW > obs.x && birdX < obs.x + obstacleWidth) {
+            if (birdY < gapTop || birdY + birdH > gapBottom) {
+                endGame();
+            }
+        }
+    }
+
+    if (birdY + birdH > canvas.height || birdY < 0) {
+        endGame();
+    }
+}
+
+function endGame() {
+    gameOver = true;
+    finalScore = score; 
+    showShareOverlay();
+}
+
+function draw() {
+    ctx.fillStyle = '#87CEEB'; 
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+
+    drawClouds();
+
+    for (let obs of obstacles) {
+        drawRectObstacle(obs);
+    }
+
+    drawBird();
+
+    ctx.fillStyle = '#000';
+    ctx.font = "30px Comic Sans MS";
+    ctx.fillText("Score: " + score, 10, 40);
+}
+
+function gameLoop() {
+    if (!gameOver) update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+function getBirdImageForScore(score) {
+    console.log("Determining image for final score:", score);
+    if (score > 50) {
+        console.log("score > 50, using fancyBirdSrc");
+        return fancyBirdSrc;
+    } else if (score > 25) {
+        console.log("score > 25, using bird25to50");
+        return bird25to50;
+    } else if (score > 10) {
+        console.log("score > 10, using bird10to25");
+        return bird10to25;
+    } else if (score >= 5) {
+        console.log("5 <= score <= 10, using bird5to10");
+        return bird5to10;
+    } else {
+        console.log("score < 5, using defaultBirdSrc");
+        return defaultBirdSrc;
+    }
+}
+
+function showShareOverlay() {
+    finalScoreText.textContent = "Score: " + finalScore;
+    shareOverlay.style.display = 'flex';
+
+    let chosenBird = new Image();
+    chosenBird.crossOrigin = "anonymous";
+    let chosenSrc = getBirdImageForScore(finalScore);
+    chosenBird.src = chosenSrc;
+
+    chosenBird.onload = () => {
+        console.log("Chosen bird image loaded successfully:", chosenBird.src);
+
+        let offCanvas = document.createElement('canvas');
+        offCanvas.width = 512;
+        offCanvas.height = 512;
+        let offCtx = offCanvas.getContext('2d');
+
+        // Background
+        offCtx.fillStyle = '#fff';
+        offCtx.fillRect(0, 0, offCanvas.width, offCanvas.height);
+
+        offCtx.setLineDash([8,4]);
+        offCtx.lineWidth = 3;
+        offCtx.strokeStyle = '#000';
+        offCtx.strokeRect(0, 0, offCanvas.width, offCanvas.height);
+
+        offCtx.font = "30px Comic Sans MS";
+        offCtx.fillStyle = '#000';
+        offCtx.textAlign = 'center';
+        offCtx.fillText("Check out my score!", offCanvas.width/2, 50);
+        
+        // 4 emojis under "Check out my score!"
+        offCtx.fillText("🐦🐤 🐦🐤", offCanvas.width/2, 80);
+
+        let imgW = Math.min(chosenBird.width, 256);
+        let imgH = Math.min(chosenBird.height, 256);
+        let imgX = (offCanvas.width - imgW)/2;
+        let imgY = 100;
+        offCtx.drawImage(chosenBird, imgX, imgY, imgW, imgH);
+
+        offCtx.font = "24px Comic Sans MS";
+        offCtx.fillStyle = '#000';
+        const line1 = "I aped into @birbz and got";
+        const line2 = "a score of " + finalScore + "!";
+        const line3 = "join the $birbz flock";
+        const line4 = "birbz.io";
+
+        offCtx.fillText(line1, offCanvas.width/2, imgY + imgH + 40);
+        offCtx.fillText(line2, offCanvas.width/2, imgY + imgH + 70);
+        offCtx.fillText(line3, offCanvas.width/2, imgY + imgH + 100);
+        offCtx.fillText(line4, offCanvas.width/2, imgY + imgH + 130);
+
+        let dataURL = offCanvas.toDataURL("image/png");
+        shareImagePreview.src = dataURL;
+
+        downloadImageBtn.onclick = function() {
+            let a = document.createElement('a');
+            a.href = dataURL;
+            a.download = "my_score.png";
+            a.click();
+        };
+
+        const shareText = `I aped into @birbz and got a score of ${finalScore}! Can you beat my score? birbz.io`;
+
+        postToXBtn.onclick = function() {
+            let url = "https://twitter.com/intent/tweet?text=" + encodeURIComponent(shareText);
+            window.open(url, '_blank');
+        };
+    }
+}
+
+tryAgainBtn.addEventListener('click', ()=> {
+    shareOverlay.style.display = 'none';
+    resetGame();
+});
+
+resetGame();
+gameLoop();
+</script>
+</body>
+</html>
