@@ -61,6 +61,26 @@ body {
     display: block;
 }
 
+/* Start Overlay */
+.start-overlay {
+    position: absolute;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.5);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    z-index:999;
+    text-align:center;
+    color:#fff;
+    font-family: "Comic Sans MS", "Comic Sans", cursive;
+    font-size:30px;
+    padding:20px;
+}
+
+/* Share Overlay */
 .share-overlay {
     position: fixed;
     top:0;
@@ -145,6 +165,11 @@ body {
         <button class="icon-button" id="btn-dex"><img src="https://i.ibb.co/bN025xY/d.png" alt="Dex"></button>
     </div>
     <canvas id="gameCanvas"></canvas>
+
+    <!-- Start overlay shows only once before the first game starts -->
+    <div class="start-overlay" id="startOverlay">
+        hit your mouse or any button to start
+    </div>
 </div>
 
 <div class="share-overlay" id="shareOverlay" style="display:none;">
@@ -168,11 +193,17 @@ body {
 // Audio setup
 const jumpSound = new Audio('jump.wav');
 const hitSound = new Audio('hit.wav');
-// Background track (does not loop)
-const bgMusic = new Audio('https://freemidi.org/getterm2-4834');
-bgMusic.volume = 0.5; // Adjust volume as needed
+// Background music (attempting to use provided link)
+const bgMusic = new Audio('https://freemidi.org/getterm2-12674');
+bgMusic.volume = 0.5; 
 bgMusic.loop = false;
-bgMusic.play().catch(e => console.log('Autoplay may be blocked by the browser.', e));
+
+bgMusic.addEventListener('ended', () => {
+    // Once the track fully ends, now let it loop forever
+    bgMusic.loop = true;
+    bgMusic.currentTime = 0;
+    bgMusic.play().catch(e=>console.log('Could not restart music:', e));
+});
 
 // Adjust canvas to fill the window
 const canvas = document.getElementById('gameCanvas');
@@ -184,7 +215,8 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// Share overlay elements
+// Elements
+const startOverlay = document.getElementById('startOverlay');
 const shareOverlay = document.getElementById('shareOverlay');
 const finalScoreText = document.getElementById('finalScoreText');
 const tryAgainBtn = document.getElementById('tryAgain');
@@ -192,7 +224,6 @@ const downloadImageBtn = document.getElementById('downloadImage');
 const postToXBtn = document.getElementById('postToX');
 const shareImagePreview = document.getElementById('shareImagePreview');
 
-// Bird images by score
 const defaultBirdSrc = "https://i.imghippo.com/files/chD8054Klw.png"; 
 const bird5to10 = "https://i.imghippo.com/files/oeM9160VAw.png";
 const bird10to25 = "https://i.imghippo.com/files/ITK7491LGk.png";
@@ -207,18 +238,17 @@ let birdH = 40;
 let birdX, birdY, birdVelY;
 let score, finalScore, gameOver;
 let obstacles = [];
-
-// Cloud image
-const cloudImg = new Image();
-cloudImg.src = "https://i.imghippo.com/files/pmQ7391ns.png";
 let clouds = [];
 
-// Slightly easier settings
 let gravity = 0.25;
 let jump = -6;
 let gapSize = 165; 
 let obstacleWidth = 60;
 let obstacleSpeed = 2.7; 
+
+let gameStarted = false; // Track if game started
+let instructionsShown = false; // We'll show instructions only once
+instructionsShown = true; // we are showing them now on load
 
 function createCloud() {
     let cloudSpeed = 0.5 + Math.random();
@@ -234,9 +264,8 @@ function createCloud() {
     });
 }
 
-// Add clouds periodically
 setInterval(() => {
-    if (!gameOver) {
+    if (!gameOver && gameStarted) {
         createCloud();
     }
 }, 3000);
@@ -258,25 +287,45 @@ function resetGame() {
     gameOver = false;
     obstacles = [];
     clouds = [];
-    createObstacle(canvas.width + 200);
-    createObstacle(canvas.width + 600);
+    if (gameStarted) {
+        createObstacle(canvas.width + 200);
+        createObstacle(canvas.width + 600);
+    }
 }
 
 function jumpBird() {
-    if (!gameOver) {
+    if (!gameOver && gameStarted) {
         birdVelY = jump;
         jumpSound.currentTime = 0;
         jumpSound.play();
     }
 }
 
+// Start the game once user interacts
+function startGame() {
+    // Remove start overlay
+    startOverlay.style.display = 'none';
+    gameStarted = true;
+    // Try playing background music after user interaction
+    bgMusic.play().catch(e=>console.log("Music play blocked: ", e));
+    resetGame();
+}
+
 document.body.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') {
-        jumpBird();
+    if (!gameStarted) {
+        startGame();
+    } else {
+        if (e.code === 'Space') {
+            jumpBird();
+        }
     }
 });
 document.body.addEventListener('click', () => {
-    jumpBird();
+    if (!gameStarted) {
+        startGame();
+    } else {
+        jumpBird();
+    }
 });
 
 function drawBird() {
@@ -306,7 +355,7 @@ function drawClouds() {
 }
 
 function update() {
-    if (gameOver) return;
+    if (gameOver || !gameStarted) return;
 
     birdVelY += gravity;
     birdY += birdVelY;
@@ -320,10 +369,11 @@ function update() {
     }
     clouds = clouds.filter(c => c.x + c.w > 0);
 
-    if (obstacles[obstacles.length - 1].x < canvas.width - 300) {
+    if (obstacles[obstacles.length - 1] && obstacles[obstacles.length - 1].x < canvas.width - 300) {
         createObstacle(canvas.width + 200);
     }
 
+    // Remove old obstacles and increment score
     if (obstacles.length && obstacles[0].x < -obstacleWidth) {
         obstacles.shift();
         score++;
@@ -357,21 +407,26 @@ function draw() {
     ctx.fillStyle = '#87CEEB'; 
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    drawClouds();
-
-    for (let obs of obstacles) {
-        drawRectObstacle(obs);
+    if (gameStarted) {
+        drawClouds();
+        for (let obs of obstacles) {
+            drawRectObstacle(obs);
+        }
     }
 
     drawBird();
 
     ctx.fillStyle = '#000';
     ctx.font = "30px Comic Sans MS";
-    ctx.fillText("Score: " + score, 10, 40);
+    if (gameStarted) {
+        ctx.fillText("Score: " + score, 10, 40);
+    } else {
+        // If not started, bird stays center, no score shown
+    }
 }
 
 function gameLoop() {
-    if (!gameOver) update();
+    if (!gameOver && gameStarted) update();
     draw();
     requestAnimationFrame(gameLoop);
 }
@@ -379,19 +434,14 @@ function gameLoop() {
 function getBirdImageForScore(score) {
     console.log("Determining image for final score:", score);
     if (score > 50) {
-        console.log("score > 50, using fancyBirdSrc");
         return fancyBirdSrc;
     } else if (score > 25) {
-        console.log("score > 25, using bird25to50");
         return bird25to50;
     } else if (score > 10) {
-        console.log("score > 10, using bird10to25");
         return bird10to25;
     } else if (score >= 5) {
-        console.log("5 <= score <= 10, using bird5to10");
         return bird5to10;
     } else {
-        console.log("score < 5, using defaultBirdSrc");
         return defaultBirdSrc;
     }
 }
@@ -406,8 +456,6 @@ function showShareOverlay() {
     chosenBird.src = chosenSrc;
 
     chosenBird.onload = () => {
-        console.log("Chosen bird image loaded successfully:", chosenBird.src);
-
         let offCanvas = document.createElement('canvas');
         offCanvas.width = 512;
         offCanvas.height = 512;
@@ -468,6 +516,8 @@ function showShareOverlay() {
 
 tryAgainBtn.addEventListener('click', ()=> {
     shareOverlay.style.display = 'none';
+    // On try again, just start the game immediately without showing instructions
+    gameStarted = true;
     resetGame();
 });
 
